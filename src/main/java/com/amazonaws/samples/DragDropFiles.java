@@ -92,30 +92,6 @@ public class DragDropFiles extends JFrame {
 
 		}
 
-//        parent = new DefaultMutableTreeNode("colors");
-//        root.add(parent);
-//        parent.add(new DefaultMutableTreeNode("red"));
-//        parent.add(new DefaultMutableTreeNode("yellow"));
-//        parent.add(new DefaultMutableTreeNode("green"));
-//        parent.add(new DefaultMutableTreeNode("blue"));
-//        parent.add(new DefaultMutableTreeNode("purple"));
-//
-//        parent = new DefaultMutableTreeNode("names");
-//        root.add(parent);
-//        nparent = new DefaultMutableTreeNode("men");
-//        nparent.add(new DefaultMutableTreeNode("jack"));
-//        nparent.add(new DefaultMutableTreeNode("kieran"));
-//        nparent.add(new DefaultMutableTreeNode("william"));
-//        nparent.add(new DefaultMutableTreeNode("jose"));
-//        
-//        parent.add(nparent);
-//        nparent = new DefaultMutableTreeNode("women");
-//        nparent.add(new DefaultMutableTreeNode("jennifer"));
-//        nparent.add(new DefaultMutableTreeNode("holly"));
-//        nparent.add(new DefaultMutableTreeNode("danielle"));
-//        nparent.add(new DefaultMutableTreeNode("tara"));
-//        parent.add(nparent);
-
 		return new DefaultTreeModel(root);
 	}
 
@@ -173,7 +149,7 @@ public class DragDropFiles extends JFrame {
 				TreePath path = dl.getPath();
 
 				// we don't support invalid paths or descendants of the names folder
-				if (path == null || namesPath.isDescendant(path)) {
+				if (path == null) {
 					return false;
 				}
 				return true;
@@ -237,7 +213,7 @@ public class DragDropFiles extends JFrame {
 				tree.scrollRectToVisible(tree.getPathBounds(path.pathByAddingChild(newNode)));
 
 				// Display uploading status
-				label.setText("UpLoaded **" + uploadName + "** successfully!");
+				label.setText("Uploaded '" + uploadName + "' successfully!");
 
 				return true;
 			}
@@ -267,14 +243,14 @@ public class DragDropFiles extends JFrame {
 				// the downloadPath object.
 				if (downloadPath != null) {
 					JOptionPane.showMessageDialog(null,
-							"You like to downloand a file from cloud from buckets:" + downloadPath.toString());
+							"File to download from cloud: " + downloadPath.toString());
 					// System.out.println(downloadPath);
 					
 					String bucketName = downloadPath.getPathComponent(1).toString();
 					String key = downloadPath.getPathComponent(2).toString();
 					String path = "./" + key;
 					downloadObjByKey(bucketName, key, path);
-					label.setText("DownLoaded **" + key + "** successfully!");
+					label.setText("Downloaded '" + key + "' successfully!");
 				}
 			}
 		});
