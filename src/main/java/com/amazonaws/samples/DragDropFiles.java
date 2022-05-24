@@ -15,31 +15,17 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
-import java.util.UUID;
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.SdkClientException;
 import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
-import com.amazonaws.regions.Region;
-import com.amazonaws.regions.Regions;
+import com.amazonaws.services.clouddirectory.model.DeleteObjectRequest;
 import com.amazonaws.services.glacier.model.Permission;
 import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
-import com.amazonaws.services.s3.model.Bucket;
-import com.amazonaws.services.s3.model.GetObjectRequest;
-import com.amazonaws.services.s3.model.ListObjectsRequest;
-import com.amazonaws.services.s3.model.ObjectListing;
-import com.amazonaws.services.s3.model.PutObjectRequest;
-import com.amazonaws.services.s3.model.S3Object;
-import com.amazonaws.services.s3.model.S3ObjectInputStream;
-import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.amazonaws.services.s3.model.*;
 
 public class DragDropFiles extends JFrame {
 
@@ -48,10 +34,13 @@ public class DragDropFiles extends JFrame {
 	private JTree tree;
 	private JLabel label;
 	private JButton download;
+	private JButton delete;
+	private JButton deleteBucket;
 	private DefaultTreeModel treeModel;
 	private TreePath namesPath;
 	private JPanel wrap;
 	private TreePath downloadPath = null;
+	private TreePath deletePath = null;
 	private static AmazonS3 s3;
 
 	private static DefaultTreeModel getDefaultTreeModel() {
@@ -76,8 +65,13 @@ public class DragDropFiles extends JFrame {
 		for (Bucket bucket : s3.listBuckets()) {
 			// create a parent node
 			String bucketName = bucket.getName();
-			parent = new DefaultMutableTreeNode(bucketName);
-			
+			parent = new DefaultMutableTreeNode(bucketName) {
+				@Override
+				public boolean isLeaf() {
+					return false;
+				}
+			};
+
 			// add the node to the tree
 			root.add(parent);
 
@@ -126,6 +120,7 @@ public class DragDropFiles extends JFrame {
 				// System.out.println("Node selected is:" + nodeInfo.toString());
 				/* React to the node selection. */
 				downloadPath = e.getNewLeadSelectionPath();
+				deletePath = e.getNewLeadSelectionPath();
 			}
 		});
 
@@ -170,18 +165,18 @@ public class DragDropFiles extends JFrame {
 				// fetch the data and bail if this fails
 				String uploadName = "";
 
-				Transferable t = info.getTransferable();
+				Transferable transferable = info.getTransferable();
 				try {
-					java.util.List<File> l = (java.util.List<File>) t.getTransferData(DataFlavor.javaFileListFlavor);
+					java.util.List<File> fileList = (java.util.List<File>) transferable.getTransferData(DataFlavor.javaFileListFlavor);
 
-					for (File f : l) {
-						uploadName = f.getName();
+					for (File file : fileList) {
+						uploadName = file.getName();
 //						String copyName = "./copy-" + f.getName();
 //						File destFile = new File(copyName);
 //						copyFile(f, destFile);
 						
-						PutObjectRequest req = new PutObjectRequest(path.getLastPathComponent().toString(), uploadName, f);
-						s3.putObject(req);
+						PutObjectRequest putRequest = new PutObjectRequest(path.getLastPathComponent().toString(), uploadName, file);
+						s3.putObject(putRequest);
 						break;// We process only one dropped file.
 					}
 				} catch (UnsupportedFlavorException e) {
@@ -217,7 +212,6 @@ public class DragDropFiles extends JFrame {
 
 				return true;
 			}
-
 		});
 
 		JPanel p = new JPanel();
@@ -233,6 +227,46 @@ public class DragDropFiles extends JFrame {
 		getContentPane().add(p, BorderLayout.NORTH);
 
 		getContentPane().add(new JScrollPane(tree), BorderLayout.CENTER);
+		delete = new JButton("Delete File/Folder");
+		delete.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				// You have to program here in this method in response to delete a file
+				// from the cloud,
+				if (deletePath != null) {
+					try {
+						if (deletePath.getPathCount() >= 3) {
+							int input = JOptionPane.showConfirmDialog(null, "Do you want to delete " + deletePath + " from AWS cloud?", "Confirm Delete Operation",
+									JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.ERROR_MESSAGE);
+							
+							// 0=yes, 1=no, 2=cancel
+
+							if (input == 0) {
+								String bucketName = deletePath.getPathComponent(1).toString();
+								String key = deletePath.getPathComponent(2).toString();
+								String path = "./" + key;
+								deleteObjByKey(bucketName, key, path);
+
+								// create a new node to represent the data and insert it into the model
+
+								DefaultMutableTreeNode parentNode = (DefaultMutableTreeNode) deletePath.getLastPathComponent();
+								treeModel.removeNodeFromParent(parentNode);
+
+								label.setText("Deleted '" + key + "' successfully!");
+							}
+						}
+						else {
+                            label.setText("Invalid Operation: cannot delete a bucket");
+						}
+					} catch (AmazonServiceException ex) {
+						ex.printStackTrace();
+					} catch (SdkClientException ex) {
+						ex.printStackTrace();
+					}
+				}
+			}
+		});
+
+		deleteBucket = new JButton("Delete Bucket");
 		download = new JButton("Download");
 		download.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
@@ -243,7 +277,7 @@ public class DragDropFiles extends JFrame {
 				// the downloadPath object.
 				if (downloadPath != null) {
 					JOptionPane.showMessageDialog(null,
-							"File to download from cloud: " + downloadPath.toString());
+							"File to download from cloud: " + downloadPath);
 					// System.out.println(downloadPath);
 					
 					String bucketName = downloadPath.getPathComponent(1).toString();
@@ -259,6 +293,7 @@ public class DragDropFiles extends JFrame {
 		p.setLayout(new BoxLayout(p, BoxLayout.X_AXIS));
 		wrap = new JPanel();
 		// wrap.add(new JLabel("Show drop location:"));
+		wrap.add(delete);
 		wrap.add(download);
 		p.add(Box.createHorizontalStrut(4));
 		p.add(Box.createGlue());
@@ -286,22 +321,20 @@ public class DragDropFiles extends JFrame {
 		test.setVisible(true);
 	}
 	
-	private static void downloadObjByKey(String buketName, String key, String path){
+	private static void downloadObjByKey(String bucketName, String key, String path){
        
         try {
-            S3Object o = s3.getObject(buketName, key);
-            S3ObjectInputStream s3is = o.getObjectContent();
+            S3Object s3Object = s3.getObject(bucketName, key);
+            S3ObjectInputStream s3ObjectInputStream = s3Object.getObjectContent();
             
-          
-            
-            FileOutputStream fos = new FileOutputStream(new File(path));
+            FileOutputStream fileOutputStream = new FileOutputStream(new File(path));
             byte[] read_buf = new byte[1024];
             int read_len = 0;
-            while ((read_len = s3is.read(read_buf)) > 0) {
-                fos.write(read_buf, 0, read_len);
+            while ((read_len = s3ObjectInputStream.read(read_buf)) > 0) {
+                fileOutputStream.write(read_buf, 0, read_len);
             }
-            s3is.close();
-            fos.close();
+            s3ObjectInputStream.close();
+            fileOutputStream.close();
         } catch (AmazonServiceException e) {
             System.err.println(e.getErrorMessage());
             System.exit(1);
@@ -313,23 +346,47 @@ public class DragDropFiles extends JFrame {
             System.exit(1);
         }
     }
-
-
-	private void copyFile(File source, File dest) throws IOException {
-		InputStream input = null;
-		OutputStream output = null;
+	
+	private static void deleteObjByKey(String bucketName, String key, String path) {
 		try {
-			input = new FileInputStream(source);
-			output = new FileOutputStream(dest);
-			byte[] buf = new byte[1024];
-			int bytesRead;
-			while ((bytesRead = input.read(buf)) > 0) {
-				output.write(buf, 0, bytesRead);
-			}
-		} finally {
-			input.close();
-			output.close();
+			s3.deleteObject(bucketName, key);
+		} catch (AmazonServiceException e) {
+			System.err.println(e.getErrorMessage());
+			System.exit(1);
 		}
+	}
+	     
+	public static void createBucket(String[] args) {
+		try {           
+			/* Check if Bucket with given name is present or not */
+			if(!s3.doesBucketExistV2("lb-aws-learning")) {
+				 
+				/* Create an Object of CreateBucketRequest */
+				CreateBucketRequest request = new CreateBucketRequest("lb-aws-learning");
+				 
+				/* Set Canned ACL as PublicRead */
+				request.setCannedAcl(CannedAccessControlList.PublicRead);
+				 
+				/* Send Create Bucket Request */
+				Bucket result = s3.createBucket(request);
+				 
+				System.out.println("Bucket Name : " + result.getName());
+				System.out.println("Creation Date : " + result.getCreationDate());
+			} else {
+				 
+				System.out.println("Bucket with given name is already present");
+				 
+			}
+		} catch (AmazonServiceException e) {
+			 
+			System.out.println(e.getErrorMessage());
+			 
+		} finally {
+			 
+			if(s3 != null) {
+				s3.shutdown();
+			}           
+		}       
 	}
 
 	public static void main(String[] args) {

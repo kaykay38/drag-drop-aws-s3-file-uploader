@@ -1,3 +1,5 @@
 **/.*
 src/main/java/com/amazonaws/samples/S3Sample.java
 pom.xml
+target
+bin
